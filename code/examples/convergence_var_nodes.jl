@@ -1,6 +1,6 @@
 using divfree_sbp
 using LinearAlgebra
-using Plots
+using DelimitedFiles
 
 #############################
 # Run square convergence test
@@ -26,11 +26,11 @@ error_Ey_L2 = zeros(Float64, n_iterations, n_number_nodes, 2)
 error_Bz_L2 = zeros(Float64, n_iterations, n_number_nodes, 2)
 
 for p in degrees
-    for N in (4 * p):(4 * p + n_number_nodes - 1)
+    for N = (4*p):(4*p+n_number_nodes-1)
         println(" ")
         println("p = ", p)
         println(" ")
-        for i in 1:n_iterations
+        for i = 1:n_iterations
             md = 2^(i - 1)
             println("1D dof = ", md * N)
 
@@ -42,18 +42,25 @@ for p in degrees
             u = initial_condition_projected(semi, tspan[1])
 
             ener0 = compute_energy(semi, u)
-            timedisc!(u, semi, tspan, cfl, dt_analysis = 0.1, save_visu = false,
-                      constant = true)
+            timedisc!(
+                u,
+                semi,
+                tspan,
+                cfl,
+                dt_analysis = 0.1,
+                save_visu = false,
+                constant = true,
+            )
 
             u_nodal = convert2nodal(semi, u)
             u_exact = initial_condition_nodal(semi, tspan[2])
 
-            error_Ex_L2[i, N - 4 * p + 1, p - 1] = l2_norm(semi, u_exact[1] .- u_nodal[1],
-                                                           true, false)
-            error_Ey_L2[i, N - 4 * p + 1, p - 1] = l2_norm(semi, u_exact[2] .- u_nodal[2],
-                                                           false, true)
-            error_Bz_L2[i, N - 4 * p + 1, p - 1] = l2_norm(semi, u_exact[3] .- u_nodal[3],
-                                                           true, true)
+            error_Ex_L2[i, N-4*p+1, p-1] =
+                l2_norm(semi, u_exact[1] .- u_nodal[1], true, false)
+            error_Ey_L2[i, N-4*p+1, p-1] =
+                l2_norm(semi, u_exact[2] .- u_nodal[2], false, true)
+            error_Bz_L2[i, N-4*p+1, p-1] =
+                l2_norm(semi, u_exact[3] .- u_nodal[3], true, true)
         end
     end
 end
@@ -61,11 +68,39 @@ end
 eoc_Ex = zeros(Float64, n_iterations - 1, n_number_nodes, 2)
 eoc_Ey = zeros(Float64, n_iterations - 1, n_number_nodes, 2)
 eoc_Bz = zeros(Float64, n_iterations - 1, n_number_nodes, 2)
-for p in 1:2
-    for i in 1:(n_iterations - 1)
-        eoc_Ex[i, :, p] = log.(error_Ex_L2[i, :, p] ./ error_Ex_L2[i + 1, :, p]) ./ log(2)
-        eoc_Ey[i, :, p] = log.(error_Ey_L2[i, :, p] ./ error_Ey_L2[i + 1, :, p]) ./ log(2)
-        eoc_Bz[i, :, p] = log.(error_Bz_L2[i, :, p] ./ error_Bz_L2[i + 1, :, p]) ./ log(2)
+for p = 1:2
+    for i = 1:(n_iterations-1)
+        eoc_Ex[i, :, p] = log.(error_Ex_L2[i, :, p] ./ error_Ex_L2[i+1, :, p]) ./ log(2)
+        eoc_Ey[i, :, p] = log.(error_Ey_L2[i, :, p] ./ error_Ey_L2[i+1, :, p]) ./ log(2)
+        eoc_Bz[i, :, p] = log.(error_Bz_L2[i, :, p] ./ error_Bz_L2[i+1, :, p]) ./ log(2)
     end
 end
-#plot(plot_Ex_L2, plot_Ey_L2, plot_Bz_L2, plot_energy, layout = (2, 2))
+
+if !isdir("out")
+    mkdir("out")
+end
+
+for j in eachindex(degrees)
+    for i = 1:n_number_nodes
+        node_amount = 4 * degrees[j] + i - 1
+        writedlm(
+            "out/EOC_constant_nodes_p" *
+            string(degrees[j]) *
+            "_" *
+            string(node_amount) *
+            "nodes.csv",
+            [round.(eoc_Ex[:, i, j], digits = 2) round.(eoc_Ey[:, i, j], digits = 2) round.(
+                eoc_Bz[:, i, j],
+                digits = 2,
+            )],
+        )
+        writedlm(
+            "out/errors_constant_nodes_p" *
+            string(degrees[j]) *
+            "_" *
+            string(node_amount) *
+            "nodes.csv",
+            [error_Ex_L2[:, i, j] error_Ey_L2[:, i, j] error_Bz_L2[:, i, j]],
+        )
+    end
+end
