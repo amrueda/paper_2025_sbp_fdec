@@ -6,6 +6,7 @@ git clone git@github.com:amrueda/paper_2025_sbp_fdec.git
 ```bash
 julia --project=./code -e 'import Pkg; Pkg.instantiate()'
 ```
+* The following convergenge tests output XML files with three columns. The first column is the data for $E_x$, the second one for $E_y$ and the third one for $B_z$.
 
 * Run the convergence tests for the weak form variant with SSPRK time integration for one element:
 ```bash
