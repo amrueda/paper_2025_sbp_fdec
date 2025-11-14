@@ -9,6 +9,9 @@ using Measures
 using Printf
 using Krylov
 
+import LinearAlgebra: size, mul!
+import Base: eltype
+
 export tensor_product_sbp
 export SemiDiscretizationFEEC, SemiDiscretizationFEECSparse, SemiDiscretizationSEM
 export compute_curl, compute_div
@@ -16,6 +19,20 @@ export compute_rhs!
 export plot_variables
 export initial_condition_projected, initial_condition_nodal
 export ssprk33!, convert2nodal, compute_energy, timedisc!, l2_norm
+
+
+"""
+SEM semi-discretization
+"""
+struct SemiDiscretizationSEM
+    N::Int
+    W::Matrix{Float64}
+    D::Matrix{Float64}
+    Winv::Matrix{Float64}
+    G1::Matrix{Float64}
+    K::Matrix{Float64}
+    nodes::Vector{Float64}
+end
 
 """
 Mimetic semi-discretization
@@ -32,24 +49,90 @@ struct SemiDiscretizationFEEC
     nodes::Vector{Float64}
 end
 
+"""
+New variant of the mimetic semi-discretization
+"""
 struct SemiDiscretizationFEECSparse
     N::Int
     n_elements_direction::Int
-    W_local::Diagonal{Float64,Vector{Float64}}
-    D_local::Matrix{Float64}
+    n_elements::Int
+    element_nodes::Vector{Float64}
+    right_neighbors::Vector{Int}
+    upper_neighbors::Vector{Int}
+    left_neighbors::Vector{Int}
+    lower_neighbors::Vector{Int}
+    D::SparseMatrixCSC{Float64,Int}
     W::Diagonal{Float64,Vector{Float64}}
-    W_x::Diagonal{Float64,Vector{Float64}}
-    W_y::Diagonal{Float64,Vector{Float64}}
     W_hat::Diagonal{Float64,Vector{Float64}}
     W_hat_inv::Diagonal{Float64,Vector{Float64}}
-    V_x::SparseMatrixCSC{Float64,Int}
-    V_y::SparseMatrixCSC{Float64,Int}
-    V2_x::SparseMatrixCSC{Float64,Int}
-    delta_x::SparseMatrixCSC{Float64,Int}
-    delta_y::SparseMatrixCSC{Float64,Int}
-    Wd_x::SparseMatrixCSC{Float64,Int}
-    Wd_y::SparseMatrixCSC{Float64,Int}
-    element_nodes::Vector{Float64}
+    V::Matrix{Float64}
+    delta::SparseMatrixCSC{Float64,Int}
+    delta_boundary::SparseMatrixCSC{Float64,Int}
+    Wd::Matrix{Float64}
+    Wd_boundary::SparseMatrixCSC{Float64,Int}
+end
+
+struct LinearProblemFEECSparse
+    semi::SemiDiscretizationFEECSparse
+    dt::Float64
+end
+
+function eltype(system::LinearProblemFEECSparse)
+    return eltype(system.semi.W)
+end
+
+function size(system::LinearProblemFEECSparse)
+    return (
+        3 * system.semi.n_elements * system.semi.N^2,
+        3 * system.semi.n_elements * system.semi.N^2,
+    )
+end
+
+function mul!(x, system::LinearProblemFEECSparse, v)
+    component_size = div(size(system)[1], 3)
+    semi = system.semi
+    x[1:component_size] .=
+        view(v, 1:component_size) .-
+        0.5 .* system.dt .* product_kronecker_combined(
+            semi.delta,
+            semi.delta_boundary,
+            view(v, (2*component_size+1):(3*component_size)),
+            (semi.N, semi.N),
+            semi.n_elements,
+            semi.upper_neighbors,
+            true,
+        )
+    x[(component_size+1):(2*component_size)] .=
+        view(v, (component_size+1):(2*component_size)) .+
+        0.5 .* system.dt .* product_kronecker_combined(
+            semi.delta,
+            semi.delta_boundary,
+            view(v, 2*component_size+1:3*component_size),
+            (semi.N, semi.N),
+            semi.n_elements,
+            semi.right_neighbors,
+            false,
+        )
+    x[(2*component_size+1):(3*component_size)] .=
+        0.5 .* system.dt .* product_kronecker_combined(
+            semi.Wd,
+            semi.Wd_boundary,
+            view(v, 1:component_size),
+            (semi.N, semi.N),
+            semi.n_elements,
+            semi.lower_neighbors,
+            true,
+        ) .-
+        0.5 .* system.dt .* product_kronecker_combined(
+            semi.Wd,
+            semi.Wd_boundary,
+            view(v, (component_size+1):(2*component_size)),
+            (semi.N, semi.N),
+            semi.n_elements,
+            semi.left_neighbors,
+            false,
+        ) .+ view(v, (2*component_size+1):(3*component_size))
+    return nothing
 end
 
 """
@@ -101,43 +184,50 @@ function SemiDiscretizationFEECSparse(N, W, D, nodes, n_elements_direction, a, b
     esf = dx / (nodes[end] - nodes[1])
     element_nodes = esf .* (nodes .- nodes[1])
     n_elements = n_elements_direction^2
-    I_Np1 = I(N + 1)
-    I_N = I(N)
-    I_m = I(n_elements)
     W_diag = esf * Diagonal(diag(W))
     D /= esf
-    # element neighbour matrices
-    P_x = spzeros(Float64, n_elements, n_elements)
-    P_y = spzeros(Float64, n_elements, n_elements)
 
-    for i = 1:(n_elements_direction-1)
+    right_neighbors = Vector{Int}(undef, n_elements)
+    upper_neighbors = Vector{Int}(undef, n_elements)
+    left_neighbors = Vector{Int}(undef, n_elements)
+    lower_neighbors = Vector{Int}(undef, n_elements)
+
+    for i = 1:n_elements_direction-1
         for j = 1:n_elements_direction
-            P_y[(i-1)*n_elements_direction+j, i*n_elements_direction+j] = 1.0
+            upper_neighbors[(i-1)*n_elements_direction+j] = i * n_elements_direction + j
         end
     end
 
     for j = 1:n_elements_direction
-        P_y[(n_elements_direction-1)*n_elements_direction+j, j] = 1.0
+        upper_neighbors[(n_elements_direction-1)*n_elements_direction+j] = j
     end
 
     for i = 1:n_elements_direction
-        for j = 1:(n_elements_direction-1)
-            P_x[(i-1)*n_elements_direction+j, (i-1)*n_elements_direction+j+1] = 1.0
+        for j = 1:n_elements_direction-1
+            right_neighbors[(i-1)*n_elements_direction+j] =
+                (i - 1) * n_elements_direction + j + 1
         end
-        P_x[i*n_elements_direction, (i-1)*n_elements_direction+1] = 1.0
+        right_neighbors[i*n_elements_direction] = (i - 1) * n_elements_direction + 1
     end
+
+    for i = 1:n_elements
+        left_neighbors[right_neighbors[i]] = i
+        lower_neighbors[upper_neighbors[i]] = i
+    end
+
     # intertwined mass matrix
     W_hat = Diagonal(view(W_diag, 1:N, 1:N))
     W_hat[1, 1] += W_diag[N+1, N+1]
+    W_hat_inv = inv(W_hat)
     # Delta matrix
-    delta_hat = spzeros(Float64, N, N)
-    for i = 1:(N-1)
-        delta_hat[i, i] = -1
-        delta_hat[i, i+1] = 1
+    delta = spzeros(Float64, N, N)
+    for i = 1:N-1
+        delta[i, i] = -1
+        delta[i, i+1] = 1
     end
-    delta_hat[N, N] = -1.0
-    delta_tilde = spzeros(Float64, N, N)
-    delta_tilde[N, 1] = 1.0
+    delta[N, N] = -1.0
+    delta_boundary = spzeros(Float64, N, N)
+    delta_boundary[N, 1] = 1.0
     # Edge basis functions
     V = spzeros(Float64, N + 1, N)
     for j = 1:N
@@ -147,62 +237,148 @@ function SemiDiscretizationFEECSparse(N, W, D, nodes, n_elements_direction, a, b
             end
         end
     end
-    
-    V_x = kron(I_N, V)
-    V_x = kron(I_m, V_x)
 
-    V2_x = kron(I_Np1, V)
-    V2_x = kron(I_m, V2_x)
-
-    V_y = kron(V, I_N)
-    V_y = kron(I_m, V_y)
-
-    delta_hat_x = kron(I_N, delta_hat)
-    delta_hat_x = kron(I_m, delta_hat_x)
-    delta_tilde_x = kron(I_N, delta_tilde)
-    delta_tilde_x = kron(P_x, delta_tilde_x)
-    delta_x = delta_hat_x + delta_tilde_x
-
-    delta_hat_y = kron(delta_hat, I_N)
-    delta_hat_y = kron(I_m, delta_hat_y)
-    delta_tilde_y = kron(delta_tilde, I_N)
-    delta_tilde_y = kron(P_y, delta_tilde_y)
-    delta_y = delta_hat_y + delta_tilde_y
-
-    W_2D = kron(W_diag, W_diag)
-    W_2D = kron(I_m, W_2D)
-
-    W_hat_2D = kron(W_hat, W_hat)
-    W_hat_2D = kron(I_m, W_hat_2D)
-    W_hat_2D_inv = Diagonal(1 ./ diag(W_hat_2D))
-
-    W_x = kron(W_diag, W_hat)
-    W_x = kron(I_m, W_x)
-    W_y = kron(W_hat, W_diag)
-    W_y = kron(I_m, W_y)
-    Wd_x = W_hat_2D_inv * transpose(delta_y) * transpose(V_y) * W_x * V_y
-    Wd_y = W_hat_2D_inv * transpose(delta_x) * transpose(V_x) * W_y * V_x
+    Wd = W_hat_inv * transpose(delta) * transpose(V) * W_diag * V
+    Wd_boundary = W_hat_inv * transpose(delta_boundary) * transpose(V) * W_diag * V
 
     return SemiDiscretizationFEECSparse(
         N,
         n_elements_direction,
-        W_diag,
-        D,
-        W_2D,
-        W_x,
-        W_y,
-        W_hat_2D,
-        W_hat_2D_inv,
-        V_x,
-        V_y,
-        V2_x,
-        delta_x,
-        delta_y,
-        Wd_x,
-        Wd_y,
+        n_elements,
         element_nodes,
+        right_neighbors,
+        upper_neighbors,
+        left_neighbors,
+        lower_neighbors,
+        D,
+        W_diag,
+        W_hat,
+        W_hat_inv,
+        V,
+        delta,
+        delta_boundary,
+        Wd,
+        Wd_boundary,
     )
 end
+
+"""
+Emulates the product of a vector with a block-diagonal matrix, 
+where the blocks are Kronecker product matrices.
+We assume here that one of the Kronecker 
+product arguments is the identity matrix.
+"""
+
+function product_kronecker(A, v, block_dims, n_elements, left = true)
+    if left
+        return product_kronecker_left(A, v, block_dims, n_elements)
+    else
+        return product_kronecker_right(A, v, block_dims, n_elements)
+    end
+end
+
+function product_kronecker_general(A, B, v, block_dims, n_elements)
+    block_size = block_dims[1] * block_dims[2]
+    new_block_size = size(A, 1) * size(B, 1)
+    b = Vector{Float64}(undef, new_block_size * n_elements)
+    for i = 1:n_elements
+        b[((i-1)*new_block_size+1):(i*new_block_size)] = vec(
+            B *
+            reshape(view(v, ((i-1)*block_size+1):(i*block_size)), block_dims) *
+            transpose(A),
+        )
+    end
+    return b
+end
+
+function product_kronecker_left(A, v, block_dims, n_elements)
+    block_size = block_dims[1] * block_dims[2]
+    new_block_size = size(A, 1) * block_dims[1]
+    b = Vector{Float64}(undef, new_block_size * n_elements)
+    for i = 1:n_elements
+        b[((i-1)*new_block_size+1):(i*new_block_size)] = vec(
+            reshape(view(v, ((i-1)*block_size+1):(i*block_size)), block_dims) *
+            transpose(A),
+        )
+    end
+    return b
+end
+
+function product_kronecker_right(A, v, block_dims, n_elements)
+    block_size = block_dims[1] * block_dims[2]
+    new_block_size = size(A, 1) * block_dims[2]
+    b = Vector{Float64}(undef, new_block_size * n_elements)
+    for i = 1:n_elements
+        b[((i-1)*new_block_size+1):(i*new_block_size)] =
+            vec(A * reshape(view(v, ((i-1)*block_size+1):(i*block_size)), block_dims))
+    end
+    return b
+end
+
+
+"""
+Emulates the product of a vector with a block matrix, 
+where the blocks are Kronecker product matrices, 
+and the block pattern is permutated from a diagonal form.
+We assume here that one of the Kronecker 
+product arguments is the identity matrix.
+"""
+
+function product_kronecker_boundary(A, v, block_dims, n_elements, offsets, left = true)
+    if left
+        return product_kronecker_boundary_left(A, v, block_dims, offsets, n_elements)
+    else
+        return product_kronecker_boundary_right(A, v, block_dims, offsets, n_elements)
+    end
+end
+
+function product_kronecker_boundary_left(A, v, block_dims, offsets, n_elements)
+    block_size = block_dims[1] * block_dims[2]
+    new_block_size = size(A, 1) * block_dims[1]
+    b = Vector{Float64}(undef, new_block_size * n_elements)
+    for i = 1:n_elements
+        b[((i-1)*new_block_size+1):(i*new_block_size)] = vec(
+            reshape(
+                view(v, ((offsets[i]-1)*block_size+1):(offsets[i]*block_size)),
+                block_dims,
+            ) * transpose(A),
+        )
+    end
+    return b
+end
+
+function product_kronecker_boundary_right(A, v, block_dims, offsets, n_elements)
+    block_size = block_dims[1] * block_dims[2]
+    new_block_size = size(A, 1) * block_dims[2]
+    b = Vector{Float64}(undef, new_block_size * n_elements)
+    for i = 1:n_elements
+        b[((i-1)*new_block_size+1):(i*new_block_size)] = vec(
+            A * reshape(
+                view(v, ((offsets[i]-1)*block_size+1):(offsets[i]*block_size)),
+                block_dims,
+            ),
+        )
+    end
+    return b
+end
+
+""" 
+Combined Kronecker product operator for boundary operators
+"""
+
+function product_kronecker_combined(
+    A,
+    A_bound,
+    v,
+    block_dims,
+    n_elements,
+    offsets,
+    left = true,
+)
+    return product_kronecker(A, v, block_dims, n_elements, left) +
+           product_kronecker_boundary(A_bound, v, block_dims, n_elements, offsets, left)
+end
+
 
 """
 Compute div of E = (Ex, Ey)
@@ -224,14 +400,51 @@ Compute div of E = (Ex, Ey)
 and return in nodal storage
 """
 function compute_div(semi::SemiDiscretizationFEECSparse, Ex, Ey)
-    return semi.V2_x * semi.V_y * (semi.delta_x * Ex + semi.delta_y * Ey)
+    div = product_kronecker_combined(
+        semi.delta,
+        semi.delta_boundary,
+        Ex,
+        (semi.N, semi.N),
+        semi.n_elements,
+        semi.right_neighbors,
+        false,
+    )
+    +product_kronecker_combined(
+        semi.delta,
+        semi.delta_boundary,
+        Ey,
+        (semi.N, semi.N),
+        semi.n_elements,
+        semi.upper_neighbors,
+        true,
+    )
+    return product_kronecker_general(semi.V, semi.V, div, (semi.N, semi.N), semi.n_elements)
+    #return semi.V2_x * semi.V_y * (semi.delta_x * Ex + semi.delta_y * Ey)
 end
 
 """
 Compute curl of B (scalar in 2D)
 """
 function compute_curl(semi::SemiDiscretizationFEECSparse, B)
-    return semi.delta_y * B, -semi.delta_x * B
+    B_x = product_kronecker_combined(
+        semi.delta,
+        semi.delta_boundary,
+        B,
+        (semi.N, semi.N),
+        semi.n_elements,
+        semi.right_neighbors,
+        false,
+    )
+    B_y = product_kronecker_combined(
+        semi.delta,
+        semi.delta_boundary,
+        B,
+        (semi.N, semi.N),
+        semi.n_elements,
+        semi.upper_neighbors,
+        true,
+    )
+    return B_y, -B_x
 end
 
 """
@@ -263,15 +476,15 @@ function compute_rhs_strong!(du, u, semi::SemiDiscretizationFEECSparse, t)
     Bz_t = Vector{Float64}(undef, length(Bz))
     m = semi.n_elements_direction
     N = semi.N
-    w_0 = semi.W_local[1, 1]
-    w_N = semi.W_local[N+1, N+1]
+    w_0 = semi.W[1, 1]
+    w_N = semi.W[N+1, N+1]
     w_inv = 1 / (w_0 + w_N)
     ind = 1
     for i = 1:m
         for j = 1:m
             offset = ((i - 1) * m + (j - 1)) * N * (N + 1)
-            offset_neighbor_x = compute_left_neighbor(i, j, m) * N * (N + 1)
-            offset_neighbor_y = compute_lower_neighbor(i, j, m) * N * (N + 1)
+            offset_neighbor_x = (semi.left_neighbors[(i-1)*m+j] - 1) * N * (N + 1)
+            offset_neighbor_y = (semi.lower_neighbors[(i-1)*m+j] - 1) * N * (N + 1)
 
             for l = 1:N
                 offset_local = offset + (l - 1) * (N + 1)
@@ -283,32 +496,26 @@ function compute_rhs_strong!(du, u, semi::SemiDiscretizationFEECSparse, t)
                         s -= Ey[offset_local+1]
                         s -=
                             w_N * sum(
-                                semi.D_local[N+1, r] * Ey[offset_neighbor_local+r] for
-                                r = 1:(N+1)
+                                semi.D[N+1, r] * Ey[offset_neighbor_local+r] for r = 1:(N+1)
                             )
-                        s -=
-                            w_0 *
-                            sum(semi.D_local[1, r] * Ey[offset_local+r] for r = 1:(N+1))
+                        s -= w_0 * sum(semi.D[1, r] * Ey[offset_local+r] for r = 1:(N+1))
                         Bz_t[ind] = w_inv * s
                     else
-                        Bz_t[ind] =
-                            -sum(semi.D_local[k, r] * Ey[offset_local+r] for r = 1:(N+1))
+                        Bz_t[ind] = -sum(semi.D[k, r] * Ey[offset_local+r] for r = 1:(N+1))
                     end
                     if l == 1
                         s = -Ex[offset_neighbor_y+N^2+k]
                         s += Ex[offset+k]
                         s +=
                             w_N * sum(
-                                semi.D_local[N+1, r] * Ex[offset_neighbor_y+(r-1)*N+k] for
+                                semi.D[N+1, r] * Ex[offset_neighbor_y+(r-1)*N+k] for
                                 r = 1:(N+1)
                             )
-                        s +=
-                            w_0 *
-                            sum(semi.D_local[1, r] * Ex[offset+(r-1)*N+k] for r = 1:(N+1))
+                        s += w_0 * sum(semi.D[1, r] * Ex[offset+(r-1)*N+k] for r = 1:(N+1))
                         Bz_t[ind] += w_inv * s
                     else
                         Bz_t[ind] +=
-                            sum(semi.D_local[l, r] * Ex[offset+(r-1)*N+k] for r = 1:(N+1))
+                            sum(semi.D[l, r] * Ex[offset+(r-1)*N+k] for r = 1:(N+1))
                     end
                     ind += 1
                 end
@@ -319,27 +526,29 @@ function compute_rhs_strong!(du, u, semi::SemiDiscretizationFEECSparse, t)
     return nothing
 end
 
-function compute_rhs_weak!(du, u, semi::SemiDiscretizationFEECSparse, t; strong = false)
+function compute_rhs_weak!(du, u, semi::SemiDiscretizationFEECSparse, t)
     Ex, Ey, Bz = u
-    du[3] = semi.Wd_y * Ey - semi.Wd_x * Ex
+    B_x = product_kronecker_combined(
+        semi.Wd,
+        semi.Wd_boundary,
+        Ex,
+        (semi.N, semi.N),
+        semi.n_elements,
+        semi.lower_neighbors,
+        true,
+    )
+    B_y = product_kronecker_combined(
+        semi.Wd,
+        semi.Wd_boundary,
+        Ey,
+        (semi.N, semi.N),
+        semi.n_elements,
+        semi.left_neighbors,
+        false,
+    )
+    du[3] = B_y - B_x
     du[1], du[2] = compute_curl(semi, Bz)
     return nothing
-end
-
-function compute_left_neighbor(i, j, m)
-    if j == 1
-        return m * i - 1
-    else
-        return (i - 1) * m + j - 2
-    end
-end
-
-function compute_lower_neighbor(i, j, m)
-    if i == 1
-        return m * (m - 1) + j - 1
-    else
-        return m * (i - 2) + j - 1
-    end
 end
 
 """
@@ -395,7 +604,7 @@ Modified from
 function initial_condition_nodal(semi::SemiDiscretizationFEECSparse, t)
     md = semi.n_elements_direction
     dx = 2 / md
-    m = md^2
+    m = semi.n_elements
     N = semi.N
     nodes = semi.element_nodes
     # Mag field
@@ -601,24 +810,11 @@ Convert a solution array to nodal representation
 """
 function convert2nodal(semi::SemiDiscretizationFEECSparse, u)
     Ex, Ey, Bz = u
-
-    Ex_nodal = semi.V_y * Ex
-    Ey_nodal = semi.V_x * Ey
+    product_kronecker(semi.Wd, Ex, (semi.N, semi.N), semi.n_elements, true)
+    Ex_nodal = product_kronecker(semi.V, Ex, (semi.N, semi.N), semi.n_elements, true)
+    Ey_nodal = product_kronecker(semi.V, Ey, (semi.N, semi.N), semi.n_elements, false)
     Bz_nodal = Bz
     return Ex_nodal, Ey_nodal, Bz_nodal
-end
-
-"""
-SEM semi-discretization
-"""
-struct SemiDiscretizationSEM
-    N::Int
-    W::Matrix{Float64}
-    D::Matrix{Float64}
-    Winv::Matrix{Float64}
-    G1::Matrix{Float64}
-    K::Matrix{Float64}
-    nodes::Vector{Float64}
 end
 
 """
@@ -797,23 +993,61 @@ end
 function discrete_gradient!(u, semi, dt)
     Ex, Ey, Bz = u
     b = [
-        Ex + 0.5 * dt * semi.delta_y * Bz
-        Ey - 0.5 * dt * semi.delta_x * Bz
-        -0.5 * dt * semi.Wd_x * Ex + 0.5 * dt * semi.Wd_y * Ey + Bz
+        Ex +
+        0.5 *
+        dt *
+        product_kronecker_combined(
+            semi.delta,
+            semi.delta_boundary,
+            Bz,
+            (semi.N, semi.N),
+            semi.n_elements,
+            semi.upper_neighbors,
+            true,
+        )
+        Ey -
+        0.5 *
+        dt *
+        product_kronecker_combined(
+            semi.delta,
+            semi.delta_boundary,
+            Bz,
+            (semi.N, semi.N),
+            semi.n_elements,
+            semi.right_neighbors,
+            false,
+        )
+        Bz -
+        0.5 *
+        dt *
+        product_kronecker_combined(
+            semi.Wd,
+            semi.Wd_boundary,
+            Ex,
+            (semi.N, semi.N),
+            semi.n_elements,
+            semi.lower_neighbors,
+            true,
+        ) +
+        0.5 *
+        dt *
+        product_kronecker_combined(
+            semi.Wd,
+            semi.Wd_boundary,
+            Ey,
+            (semi.N, semi.N),
+            semi.n_elements,
+            semi.left_neighbors,
+            false,
+        )
     ]
-    n = size(semi.W_hat)
-    A = sparse(
-        [
-            I(n[1]) spzeros(n) -0.5*dt*semi.delta_y
-            spzeros(n) I(n[1]) 0.5*dt*semi.delta_x
-            0.5*dt*semi.Wd_x -0.5*dt*semi.Wd_y I(n[1])
-        ],
-    )
+    A = LinearProblemFEECSparse(semi, dt)
+    n = length(Ex)
     x = reduce(vcat, u)
     x, _ = krylov_solve(:gmres, A, b, x, atol = 1e-12, rtol = 1e-12)
-    u[1] = x[1:n[1]]
-    u[2] = x[(n[1]+1):(2*n[1])]
-    u[3] = x[(2*n[1]+1):(3*n[1])]
+    u[1] .= view(x, 1:n)
+    u[2] .= view(x, (n+1):(2*n))
+    u[3] .= view(x, (2*n+1):(3*n))
 end
 
 function compute_energy(semi, u)
@@ -832,11 +1066,30 @@ Alternative energy computation for the sparse implementation.
 
 function compute_energy(semi::SemiDiscretizationFEECSparse, u)
     Ex, Ey, Bz = u
-
-    e = transpose(Ex) * transpose(semi.V_y) * semi.W_x * semi.V_y * Ex
-    e += transpose(Ey) * transpose(semi.V_x) * semi.W_y * semi.V_x * Ey
-    e += transpose(Bz) * semi.W_hat * Bz
-
+    e =
+        transpose(Ex) * product_kronecker_general(
+            transpose(semi.V) * semi.W * semi.V,
+            semi.W_hat,
+            Ex,
+            (semi.N, semi.N),
+            semi.n_elements,
+        )
+    e +=
+        transpose(Ey) * product_kronecker_general(
+            semi.W_hat,
+            transpose(semi.V) * semi.W * semi.V,
+            Ey,
+            (semi.N, semi.N),
+            semi.n_elements,
+        )
+    e +=
+        transpose(Bz) * product_kronecker_general(
+            semi.W_hat,
+            semi.W_hat,
+            Bz,
+            (semi.N, semi.N),
+            semi.n_elements,
+        )
     return 0.5 * e
 end
 
@@ -854,9 +1107,30 @@ function compute_denergy_dt(semi::SemiDiscretizationFEECSparse, u, du)
     Ex, Ey, Bz = u
     dEx, dEy, dBz = du
 
-    de = transpose(dEx) * transpose(semi.V_y) * semi.W_x * semi.V_y * Ex
-    de += transpose(dEy) * transpose(semi.V_x) * semi.W_y * semi.V_x * Ey
-    de += transpose(dBz) * semi.W_hat * Bz
+    de =
+        transpose(dEx) * product_kronecker_general(
+            transpose(semi.V) * semi.W * semi.V,
+            semi.W_hat,
+            Ex,
+            (semi.N, semi.N),
+            semi.n_elements,
+        )
+    de +=
+        transpose(dEy) * product_kronecker_general(
+            semi.W_hat,
+            transpose(semi.V) * semi.W * semi.V,
+            Ey,
+            (semi.N, semi.N),
+            semi.n_elements,
+        )
+    de +=
+        transpose(dBz) * product_kronecker_general(
+            semi.W_hat,
+            semi.W_hat,
+            Bz,
+            (semi.N, semi.N),
+            semi.n_elements,
+        )
     return de
 end
 
@@ -946,7 +1220,21 @@ function timedisc!(
         if !implicit
             ssprk33!(du, u, semi, t, dt, r0, strong = strong)
         else
+            #if dt < determine_timestep(semi, cfl, implicit)
+            #ssprk33!(du, u, semi, t, dt, r0, strong = strong)
             discrete_gradient!(u, semi, dt)
+            #=
+            else
+                Ex, Ey, Bz = u
+                b = [Ex + 0.5 * dt * semi.delta_y * Bz; Ey - 0.5 * dt * semi.delta_x * Bz; 
+                                -0.5 * dt * semi.Wd_x * Ex + 0.5 * dt * semi.Wd_y * Ey + Bz]
+                b = Q' * (R\b)
+                u[1] = b[1:n[1]]
+                u[2] = b[n[1]+1:2*n[1]]
+                u[3] = b[2*n[1]+1:3*n[1]]
+            end 
+            =#
+
         end
         t = t + dt
 
@@ -990,13 +1278,45 @@ we have to tell the function in which directions we are continuous or discontinu
 """
 function l2_norm(semi::SemiDiscretizationFEECSparse, field, cont_x::Bool, cont_y::Bool)
     if !cont_x && !cont_y
-        return sqrt(transpose(field) * semi.W * field)
+        return sqrt(
+            transpose(field) * product_kronecker_general(
+                semi.W,
+                semi.W,
+                field,
+                (semi.N + 1, semi.N + 1),
+                semi.n_elements,
+            ),
+        )
     elseif cont_x && cont_y
-        return sqrt(transpose(field) * semi.W_hat * field)
+        return sqrt(
+            transpose(field) * product_kronecker_general(
+                semi.W_hat,
+                semi.W_hat,
+                field,
+                (semi.N, semi.N),
+                semi.n_elements,
+            ),
+        )
     elseif cont_x
-        return sqrt(transpose(field) * semi.W_x * field)
+        return sqrt(
+            transpose(field) * product_kronecker_general(
+                semi.W,
+                semi.W_hat,
+                field,
+                (semi.N, semi.N + 1),
+                semi.n_elements,
+            ),
+        )
     else
-        return sqrt(transpose(field) * semi.W_y * field)
+        return sqrt(
+            transpose(field) * product_kronecker_general(
+                semi.W_hat,
+                semi.W,
+                field,
+                (semi.N + 1, semi.N),
+                semi.n_elements,
+            ),
+        )
     end
 end
 
