@@ -1,6 +1,9 @@
-* Clone the reproducibility repository:
+* Make sure to run the following tests with Julia 1.11.7.
+
+* Clone the reproducibility repository and navigate to the directory:
 ```bash
 git clone git@github.com:amrueda/paper_2025_sbp_fdec.git
+cd paper_2025_sbp_fdec
 ```
 * Instantiate the code:
 ```bash
@@ -27,6 +30,8 @@ julia --project=./code -e 'include(joinpath("code", "examples", "convergence_str
 ```bash
 julia --project=./code -e 'include(joinpath("code", "examples", "convergence_var_nodes.jl"))'
 ```
+
+* The last two tests output the divergence and energy plots:
 
 * Run the energy and divergence tests to T = 1 for a coarse and a fine resolution:
 ```bash
