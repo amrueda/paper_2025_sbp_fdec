@@ -400,26 +400,25 @@ Compute div of E = (Ex, Ey)
 and return in nodal storage
 """
 function compute_div(semi::SemiDiscretizationFEECSparse, Ex, Ey)
-    div = product_kronecker_combined(
-        semi.delta,
-        semi.delta_boundary,
-        Ex,
-        (semi.N, semi.N),
-        semi.n_elements,
-        semi.right_neighbors,
-        false,
-    )
-    +product_kronecker_combined(
-        semi.delta,
-        semi.delta_boundary,
-        Ey,
-        (semi.N, semi.N),
-        semi.n_elements,
-        semi.upper_neighbors,
-        true,
-    )
+    div =
+        product_kronecker_combined(
+            semi.delta,
+            semi.delta_boundary,
+            Ex,
+            (semi.N, semi.N),
+            semi.n_elements,
+            semi.right_neighbors,
+            false,
+        ) + product_kronecker_combined(
+            semi.delta,
+            semi.delta_boundary,
+            Ey,
+            (semi.N, semi.N),
+            semi.n_elements,
+            semi.upper_neighbors,
+            true,
+        )
     return product_kronecker_general(semi.V, semi.V, div, (semi.N, semi.N), semi.n_elements)
-    #return semi.V2_x * semi.V_y * (semi.delta_x * Ex + semi.delta_y * Ey)
 end
 
 """
@@ -1142,19 +1141,6 @@ function determine_timestep(semi, cfl; implicit = false, constant = false)
     end
 end
 
-function determine_timestep(
-    semi::SemiDiscretizationFEECSparse,
-    cfl;
-    implicit = false,
-    constant = false,
-)
-    if constant
-        return 1e-4
-    else
-        return cfl * minimum(diag(semi.W_local))
-    end
-end
-
 function timedisc!(
     u,
     semi,
@@ -1343,7 +1329,6 @@ function convert_to_matrix(
     else
         n_y = md * (N + 1)
     end
-
     field_matrix = zeros(n_y, n_x)
     if cont_x && cont_y
         for i = 1:md
@@ -1382,7 +1367,7 @@ function convert_to_matrix(
     else
         for i = 1:md
             for j = 1:md
-                offset = (i - 1) * md * (N + 1)^2 + (j - 1) * md * (N + 1)
+                offset = (i - 1) * md * (N + 1)^2 + (j - 1) * (N + 1)^2
                 range_x = ((i-1)*(N+1)+1):(i*(N+1))
                 range_y = ((j-1)*(N+1)+1):(j*(N+1))
                 field_matrix[range_x, range_y] = transpose(
