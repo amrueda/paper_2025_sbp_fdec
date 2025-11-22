@@ -21,12 +21,12 @@ julia --project=./code -e 'include(joinpath("code", "examples", "convergence_wea
 julia --project=./code -e 'include(joinpath("code", "examples", "convergence_weak_form_implicit.jl"))'
 ```
 
-* Run the convergence tests for the strong form variant with Crank-Nicolson time integration for one element as validation of the equivalence to the weak form. This test is not shown in the paper since the results are the same up to machine precision.
+* Run the convergence tests for the strong form variant with SSPRK time integration for one element as validation of the equivalence to the weak form. This test is not shown in the paper since the results are the same up to machine precision.
 ```bash
 julia --project=./code -e 'include(joinpath("code", "examples", "convergence_strong_form.jl"))'
 ```
 
-* Run the convergence tests for the weak form variant with SSPRK time integration for a constant number of nodes per element. This runs several convergence tests for varying amount of points:
+* Run the convergence tests for the weak form variant with SSPRK time integration for a constant number of nodes per element. This runs several convergence tests for varying amounts of points:
 ```bash
 julia --project=./code -e 'include(joinpath("code", "examples", "convergence_var_nodes.jl"))'
 ```
