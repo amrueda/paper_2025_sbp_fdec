@@ -1135,7 +1135,7 @@ end
 
 function determine_timestep(semi, cfl; implicit = false, constant = false)
     if constant
-        return 1e-4
+        return 2e-5
     else
         return cfl * minimum(diag(semi.W))
     end
