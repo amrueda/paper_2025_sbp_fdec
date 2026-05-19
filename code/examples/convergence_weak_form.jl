@@ -11,12 +11,17 @@ using Plots
 # Test with SBP FD
 tspan = (0.0, 1.0)
 cfl = 1.0
+#n_iterations = 6
+#degrees = [2, 3]
+
 n_iterations = 6
 degrees = [2, 3]
 
 error_Ex_L2 = zeros(Float64, n_iterations, length(degrees))
 error_Ey_L2 = zeros(Float64, n_iterations, length(degrees))
 error_Bz_L2 = zeros(Float64, n_iterations, length(degrees))
+
+q = plot()
 
 for p in degrees
     println(" ")
@@ -32,7 +37,7 @@ for p in degrees
 
         semi = SemiDiscretizationFEECSparse(N - 1, Diagonal(W), sparse(D), nodes, md, -1, 1)
 
-        u = initial_condition_projected(semi, tspan[1])
+        u = initial_condition_projected(initial_condition_periodic, semi, tspan[1])
 
         timedisc!(
             u,
@@ -44,6 +49,8 @@ for p in degrees
             strong = false,
             constant = true,
         )
+        global q = plot_variables(semi, u .- initial_condition_projected(semi, tspan[2]))
+        plot(q)
         u_nodal = convert2nodal(semi, u)
         u_exact = initial_condition_nodal(semi, tspan[2])
 
@@ -55,9 +62,9 @@ for p in degrees
     end
 end
 
-eoc_Ex = zeros(Float64, n_iterations - 1, 2)
-eoc_Ey = zeros(Float64, n_iterations - 1, 2)
-eoc_Bz = zeros(Float64, n_iterations - 1, 2)
+eoc_Ex = zeros(Float64, n_iterations - 1, length(degrees))
+eoc_Ey = zeros(Float64, n_iterations - 1, length(degrees))
+eoc_Bz = zeros(Float64, n_iterations - 1, length(degrees))
 
 for i = 1:(n_iterations-1)
     eoc_Ex[i, :] = log.(error_Ex_L2[i, :] ./ error_Ex_L2[i+1, :]) ./ log(2)
@@ -71,11 +78,11 @@ end
 
 for j in eachindex(degrees)
     writedlm(
-        "out/errors_weak_form_p" * string(degrees[j]) * ".csv",
+        joinpath("out", "errors_weak_form_p" * string(degrees[j]) * ".csv"),
         [error_Ex_L2[:, j] error_Ey_L2[:, j] error_Bz_L2[:, j]],
     )
     writedlm(
-        "out/EOC_weak_form_p" * string(degrees[j]) * ".csv",
+        joinpath("out", "EOC_weak_form_p" * string(degrees[j]) * ".csv"),
         [round.(eoc_Ex[:, j], digits = 2) round.(eoc_Ey[:, j], digits = 2) round.(
             eoc_Bz[:, j],
             digits = 2,

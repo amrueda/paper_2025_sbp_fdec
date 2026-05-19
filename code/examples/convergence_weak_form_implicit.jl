@@ -57,9 +57,9 @@ for p in degrees
     end
 end
 
-eoc_Ex = zeros(Float64, n_iterations - 1, 2)
-eoc_Ey = zeros(Float64, n_iterations - 1, 2)
-eoc_Bz = zeros(Float64, n_iterations - 1, 2)
+eoc_Ex = zeros(Float64, n_iterations - 1, length(degrees))
+eoc_Ey = zeros(Float64, n_iterations - 1, length(degrees))
+eoc_Bz = zeros(Float64, n_iterations - 1, length(degrees))
 
 for i = 1:(n_iterations-1)
     eoc_Ex[i, :] = log.(error_Ex_L2[i, :] ./ error_Ex_L2[i+1, :]) ./ log(2)
@@ -73,11 +73,11 @@ end
 
 for j in eachindex(degrees)
     writedlm(
-        "out/errors_weak_form_implicit_p" * string(degrees[j]) * ".csv",
+        joinpath("out", "errors_weak_form_implicit_p" * string(degrees[j]) * ".csv"),
         [error_Ex_L2[:, j] error_Ey_L2[:, j] error_Bz_L2[:, j]],
     )
     writedlm(
-        "out/EOC_weak_form_implicit_p" * string(degrees[j]) * ".csv",
+        joinpath("out", "EOC_weak_form_implicit_p" * string(degrees[j]) * ".csv"),
         [round.(eoc_Ex[:, j], digits = 2) round.(eoc_Ey[:, j], digits = 2) round.(
             eoc_Bz[:, j],
             digits = 2,

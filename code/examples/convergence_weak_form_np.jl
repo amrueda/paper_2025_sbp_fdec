@@ -11,13 +11,17 @@ using Plots
 # Test with SBP FD
 tspan = (0.0, 1.0)
 cfl = 1.0
+#n_iterations = 6
+#degrees = [2, 3]
+
 n_iterations = 6
-degrees = [2, 3]
+degrees = [3]
 
 error_Ex_L2 = zeros(Float64, n_iterations, length(degrees))
 error_Ey_L2 = zeros(Float64, n_iterations, length(degrees))
 error_Bz_L2 = zeros(Float64, n_iterations, length(degrees))
-ener_delta = zeros(Float64, n_iterations, length(degrees))
+
+q = plot()
 
 for p in degrees
     println(" ")
@@ -31,11 +35,20 @@ for p in degrees
         nodes, W, Q, D, tL, tR = tensor_product_sbp.d1_fd_sbp(p, N)
         nodes = vec(nodes)
 
-        semi = SemiDiscretizationFEECSparse(N - 1, Diagonal(W), sparse(D), nodes, md, -1, 1)
+        semi = SemiDiscretizationFEECSparse(
+            N - 1,
+            W,
+            D,
+            nodes,
+            md,
+            0,
+            1,
+            periodic = (false, false),
+            essential = (false, true),
+        )
 
-        u = initial_condition_projected(initial_condition_periodic, semi, tspan[1])
+        u = initial_condition_projected(initial_condition_non_periodic, semi, tspan[1])
 
-        ener0 = compute_energy(semi, u)
         timedisc!(
             u,
             semi,
@@ -43,23 +56,24 @@ for p in degrees
             cfl,
             dt_analysis = 0.1,
             save_visu = false,
-            strong = true,
+            strong = false,
             constant = true,
         )
 
         u_nodal = convert2nodal(semi, u)
-        u_exact = initial_condition_nodal(semi, tspan[2])
+        u_exact = initial_condition_nodal(initial_condition_non_periodic, semi, tspan[2])
 
         error_Ex_L2[i, p-1] = l2_norm(semi, u_exact[1] .- u_nodal[1], true, false)
         error_Ey_L2[i, p-1] = l2_norm(semi, u_exact[2] .- u_nodal[2], false, true)
         error_Bz_L2[i, p-1] = l2_norm(semi, u_exact[3] .- u_nodal[3], true, true)
+
         N *= 2
     end
 end
 
-eoc_Ex = zeros(Float64, n_iterations - 1, 2)
-eoc_Ey = zeros(Float64, n_iterations - 1, 2)
-eoc_Bz = zeros(Float64, n_iterations - 1, 2)
+eoc_Ex = zeros(Float64, n_iterations - 1, length(degrees))
+eoc_Ey = zeros(Float64, n_iterations - 1, length(degrees))
+eoc_Bz = zeros(Float64, n_iterations - 1, length(degrees))
 
 for i = 1:(n_iterations-1)
     eoc_Ex[i, :] = log.(error_Ex_L2[i, :] ./ error_Ex_L2[i+1, :]) ./ log(2)
@@ -73,11 +87,11 @@ end
 
 for j in eachindex(degrees)
     writedlm(
-        joinpath("out", "errors_strong_form_p" * string(degrees[j]) * ".csv"),
+        joinpath("out", "errors_weak_form_p" * string(degrees[j]) * "_np.csv"),
         [error_Ex_L2[:, j] error_Ey_L2[:, j] error_Bz_L2[:, j]],
     )
     writedlm(
-        joinpath("out", "EOC_strong_form_p" * string(degrees[j]) * ".csv"),
+        joinpath("out", "EOC_weak_form_p" * string(degrees[j]) * "_np.csv"),
         [round.(eoc_Ex[:, j], digits = 2) round.(eoc_Ey[:, j], digits = 2) round.(
             eoc_Bz[:, j],
             digits = 2,

@@ -22,15 +22,13 @@ cfl = 1.0
 #degrees = [2, 3]
 
 n_iterations = 6
-n_number_nodes = 3
-degrees = [2, 3]
+n_number_nodes = 2
+degrees = [3]
 
 error_Ex_L2 = zeros(Float64, n_iterations, n_number_nodes, 2)
 error_Ey_L2 = zeros(Float64, n_iterations, n_number_nodes, 2)
 error_Bz_L2 = zeros(Float64, n_iterations, n_number_nodes, 2)
-
 q = plot()
-
 for p in degrees
     for N = (4*p):(4*p+n_number_nodes-1)
         println(" ")
@@ -38,14 +36,24 @@ for p in degrees
         println(" ")
         for i = 1:n_iterations
             md = 2^(i - 1)
-            println("1D dof = ", md * N)
+            println("1D dof = ", md * 100)
 
-            nodes, W, Q, D, tL, tR = tensor_product_sbp.d1_fd_sbp(p, N)
+            nodes, W, Q, D, tL, tR = tensor_product_sbp.d1_fd_sbp(p, 100)
             nodes = vec(nodes)
 
-            semi = SemiDiscretizationFEECSparse(N - 1, W, D, nodes, md, -1, 1)
+            semi = SemiDiscretizationFEECSparse(
+                100 - 1,
+                W,
+                D,
+                nodes,
+                md,
+                0,
+                1,
+                periodic = (false, false),
+                essential = (false, true),
+            )
 
-            u = initial_condition_projected(initial_condition_periodic, semi, tspan[1])
+            u = initial_condition_projected(initial_condition_non_periodic, semi, tspan[1])
 
             ener0 = compute_energy(semi, u)
             timedisc!(
@@ -55,11 +63,13 @@ for p in degrees
                 cfl,
                 dt_analysis = 0.1,
                 save_visu = false,
-                constant = true,
+                constant = false,
             )
+            #global q = plot_variables(semi, u .- initial_condition_projected(initial_condition_non_periodic, semi, tspan[2]))
             global q = plot_variables(semi, u)
             u_nodal = convert2nodal(semi, u)
-            u_exact = initial_condition_nodal(semi, tspan[2])
+            u_exact =
+                initial_condition_nodal(initial_condition_non_periodic, semi, tspan[2])
 
             error_Ex_L2[i, N-4*p+1, p-1] =
                 l2_norm(semi, u_exact[1] .- u_nodal[1], true, false)
@@ -96,7 +106,7 @@ for j in eachindex(degrees)
                 string(degrees[j]) *
                 "_" *
                 string(node_amount) *
-                "nodes.csv",
+                "nodes_np.csv",
             ),
             [round.(eoc_Ex[:, i, j], digits = 2) round.(eoc_Ey[:, i, j], digits = 2) round.(
                 eoc_Bz[:, i, j],
@@ -110,7 +120,7 @@ for j in eachindex(degrees)
                 string(degrees[j]) *
                 "_" *
                 string(node_amount) *
-                "nodes.csv",
+                "nodes_np.csv",
             ),
             [error_Ex_L2[:, i, j] error_Ey_L2[:, i, j] error_Bz_L2[:, i, j]],
         )
