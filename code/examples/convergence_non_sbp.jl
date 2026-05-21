@@ -13,14 +13,15 @@ tspan = (0.0, 1.0)
 cfl = 1.0
 n_iterations = 6
 md = 1
-N = 12
 
 error_Ex_L2 = zeros(Float64, n_iterations, 2)
 error_Ey_L2 = zeros(Float64, n_iterations, 2)
 error_Bz_L2 = zeros(Float64, n_iterations, 2)
 
+global it = 1
 for strong in [false, true]
     it = 1
+    N = 12
     for i = 1:n_iterations
         println("1D dof = ", md * (N))
 
@@ -50,9 +51,10 @@ for strong in [false, true]
         error_Ey_L2[i, it] = l2_norm(semi, u_exact[2] .- u_nodal[2], false, true)
         error_Bz_L2[i, it] = l2_norm(semi, u_exact[3] .- u_nodal[3], true, true)
 
-        global N *= 2
+        N *= 2
     end
-    it += 1
+    global it += 1
+    break
 end
 
 eoc_Ex = zeros(Float64, n_iterations - 1, 2)

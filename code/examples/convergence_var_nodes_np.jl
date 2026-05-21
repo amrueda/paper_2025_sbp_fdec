@@ -15,7 +15,7 @@ prob = ODEProblem(compute_rhs!, u0, tspan, semi)
  =#
 
 # Test with SBP FD
-tspan = (0.0, 0.1)
+tspan = (0.0, 1.0)
 cfl = 1.0
 #n_iterations = 6
 #n_number_nodes = 3
@@ -25,10 +25,12 @@ n_iterations = 6
 n_number_nodes = 2
 degrees = [3]
 
-error_Ex_L2 = zeros(Float64, n_iterations, n_number_nodes, 2)
-error_Ey_L2 = zeros(Float64, n_iterations, n_number_nodes, 2)
-error_Bz_L2 = zeros(Float64, n_iterations, n_number_nodes, 2)
-q = plot()
+error_Ex_L2 = zeros(Float64, n_iterations, n_number_nodes, length(degrees))
+error_Ey_L2 = zeros(Float64, n_iterations, n_number_nodes, length(degrees))
+error_Bz_L2 = zeros(Float64, n_iterations, n_number_nodes, length(degrees))
+
+it = 1
+
 for p in degrees
     for N = (4*p):(4*p+n_number_nodes-1)
         println(" ")
@@ -36,13 +38,13 @@ for p in degrees
         println(" ")
         for i = 1:n_iterations
             md = 2^(i - 1)
-            println("1D dof = ", md * 100)
+            println("1D dof = ", md * N)
 
-            nodes, W, Q, D, tL, tR = tensor_product_sbp.d1_fd_sbp(p, 100)
+            nodes, W, Q, D, tL, tR = tensor_product_sbp.d1_fd_sbp(p, N)
             nodes = vec(nodes)
 
             semi = SemiDiscretizationFEECSparse(
-                100 - 1,
+                N - 1,
                 W,
                 D,
                 nodes,
@@ -63,22 +65,20 @@ for p in degrees
                 cfl,
                 dt_analysis = 0.1,
                 save_visu = false,
-                constant = false,
+                constant = true,
             )
-            #global q = plot_variables(semi, u .- initial_condition_projected(initial_condition_non_periodic, semi, tspan[2]))
-            global q = plot_variables(semi, u)
             u_nodal = convert2nodal(semi, u)
-            u_exact =
-                initial_condition_nodal(initial_condition_non_periodic, semi, tspan[2])
+            u_exact = initial_condition_nodal(initial_condition_non_periodic, semi, tspan[2])
 
-            error_Ex_L2[i, N-4*p+1, p-1] =
+            error_Ex_L2[i, N-4*p+1, it] =
                 l2_norm(semi, u_exact[1] .- u_nodal[1], true, false)
-            error_Ey_L2[i, N-4*p+1, p-1] =
+            error_Ey_L2[i, N-4*p+1, it] =
                 l2_norm(semi, u_exact[2] .- u_nodal[2], false, true)
-            error_Bz_L2[i, N-4*p+1, p-1] =
+            error_Bz_L2[i, N-4*p+1, it] =
                 l2_norm(semi, u_exact[3] .- u_nodal[3], true, true)
         end
     end
+    global it += 1
 end
 
 eoc_Ex = zeros(Float64, n_iterations - 1, n_number_nodes, length(degrees))

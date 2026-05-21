@@ -16,6 +16,7 @@ cfl = 1.0
 
 n_iterations = 6
 degrees = [3]
+p = degrees[1]
 
 error_Ex_L2 = zeros(Float64, n_iterations, length(degrees))
 error_Ey_L2 = zeros(Float64, n_iterations, length(degrees))
@@ -23,53 +24,53 @@ error_Bz_L2 = zeros(Float64, n_iterations, length(degrees))
 
 q = plot()
 
-for p in degrees
-    println(" ")
-    println("p = ", p)
-    println(" ")
-    md = 1
-    N = 4 * p
-    for i = 1:n_iterations
-        println("1D dof = ", md * (N))
 
-        nodes, W, Q, D, tL, tR = tensor_product_sbp.d1_fd_sbp(p, N)
-        nodes = vec(nodes)
+println(" ")
+println("p = ", p)
+println(" ")
+md = 1
+N = 4 * p
+for i = 1:n_iterations
+    println("1D dof = ", md * (N))
 
-        semi = SemiDiscretizationFEECSparse(
-            N - 1,
-            W,
-            D,
-            nodes,
-            md,
-            0,
-            1,
-            periodic = (false, false),
-            essential = (false, true),
-        )
+    nodes, W, Q, D, tL, tR = tensor_product_sbp.d1_fd_sbp(p, N)
+    nodes = vec(nodes)
 
-        u = initial_condition_projected(initial_condition_non_periodic, semi, tspan[1])
+    semi = SemiDiscretizationFEECSparse(
+        N - 1,
+        W,
+        D,
+        nodes,
+        md,
+        0,
+        1,
+        periodic = (false, false),
+        essential = (false, true),
+    )
 
-        timedisc!(
-            u,
-            semi,
-            tspan,
-            cfl,
-            dt_analysis = 0.1,
-            save_visu = false,
-            strong = false,
-            constant = true,
-        )
+    u = initial_condition_projected(initial_condition_non_periodic, semi, tspan[1])
 
-        u_nodal = convert2nodal(semi, u)
-        u_exact = initial_condition_nodal(initial_condition_non_periodic, semi, tspan[2])
+    timedisc!(
+        u,
+        semi,
+        tspan,
+        cfl,
+        dt_analysis = 0.1,
+        save_visu = false,
+        strong = false,
+        constant = true,
+    )
 
-        error_Ex_L2[i, p-1] = l2_norm(semi, u_exact[1] .- u_nodal[1], true, false)
-        error_Ey_L2[i, p-1] = l2_norm(semi, u_exact[2] .- u_nodal[2], false, true)
-        error_Bz_L2[i, p-1] = l2_norm(semi, u_exact[3] .- u_nodal[3], true, true)
+    u_nodal = convert2nodal(semi, u)
+    u_exact = initial_condition_nodal(initial_condition_non_periodic, semi, tspan[2])
 
-        N *= 2
-    end
+    error_Ex_L2[i, 1] = l2_norm(semi, u_exact[1] .- u_nodal[1], true, false)
+    error_Ey_L2[i, 1] = l2_norm(semi, u_exact[2] .- u_nodal[2], false, true)
+    error_Bz_L2[i, 1] = l2_norm(semi, u_exact[3] .- u_nodal[3], true, true)
+
+    global N *= 2
 end
+
 
 eoc_Ex = zeros(Float64, n_iterations - 1, length(degrees))
 eoc_Ey = zeros(Float64, n_iterations - 1, length(degrees))

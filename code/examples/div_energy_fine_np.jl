@@ -45,7 +45,7 @@ for p in degrees
         implicit = false,
     )
 
-    u = initial_condition_projected(semi, tspan[1])
+    u = initial_condition_projected(initial_condition_non_periodic, semi, tspan[1])
     div_implicit[:, i], energy_implicit[:, i] = timedisc!(
         u,
         semi,
@@ -124,4 +124,4 @@ plot!(
     label = "p = 3, Crank-Nicolson",
     linestyle = :dashdotdot,
 )
-savefig(en1, joinpath("out", "energy_test_fine.pdf"))
+savefig(en1, joinpath("out", "energy_test_fine_np.pdf"))

@@ -29,6 +29,10 @@ julia --project=./code -e 'include(joinpath("code", "examples", "convergence_wea
 * Run the convergence tests for the periodic case in the strong form variant with SSPRK time integration for one element as validation of the equivalence to the weak form. This test is not shown in the paper since the results are the same up to machine precision.
 ```bash
 julia --project=./code -e 'include(joinpath("code", "examples", "convergence_strong_form.jl"))'
+
+* Run the convergence tests for the periodic case for the non-SBP operator with SSPRK time integration for one element for both the strong and the weak variant: 
+```bash
+julia --project=./code -e 'include(joinpath("code", "examples", "convergence_non_sbp.jl"))'
 ```
 
 * Run the convergence tests for the periodic case in the weak form variant with SSPRK time integration for a constant number of nodes per element. This runs several convergence tests for varying amounts of points:
@@ -41,7 +45,7 @@ julia --project=./code -e 'include(joinpath("code", "examples", "convergence_var
 julia --project=./code -e 'include(joinpath("code", "examples", "convergence_var_nodes_np.jl"))'
 ```
 
-* The last two tests output the divergence and energy plots:
+* These tests output plots:
 
 * Run the energy and divergence tests for the periodic case to T = 1 for a coarse and a fine resolution:
 ```bash

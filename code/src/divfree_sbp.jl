@@ -1391,64 +1391,69 @@ function compute_rhs_strong!(du, u, semi::SemiDiscretizationFEECSparse, t)
                 offset_Ey += (j - 1) * (N + 1)
                 offset_neighbor_x += (j_l - 1) * (N + 1)
             end
+            offset_Bz = (i-1) * m * N^2 + (j-1) * N^2 + (i-1) * !semi.periodic[1] * N + (j-1) * inc_y * N
+            Bz_t[(offset_Bz+1):(offset_Bz+(N+inc_x)*(N+inc_y))] = vec(semi.D[1:(N+inc_x),:] * transpose(reshape(view(Ex, (offset_Ex+1):(offset_Ex+(N+inc_x)*(N+1))), N + inc_x, N + 1))
+                                                                  - transpose(semi.D[1:(N+inc_y),:] * reshape(view(Ey, (offset_Ex+1):(offset_Ex+(N+1)*(N+inc_y))), N + 1, N + inc_y)))
             for l = 1:(N+inc_y)
                 offset_local = offset_Ey + (l - 1) * (N + 1)
                 offset_neighbor_local = offset_neighbor_x + (l - 1) * (N + 1)
                 for k = 1:(N+inc_x)
-                    if k == 1
-                        if !semi.periodic[1] && j == 1
-                            Bz_t[ind] =
-                                -sum(semi.D[k, r] * Ey[offset_local+r] for r = 1:(N+1))
-                            Bz_t[ind] -= Ey[offset_local+1] / w_0
+                    if k == 1 || l == 1 || k == N + 1 || l == N + 1
+                        if k == 1
+                            if !semi.periodic[1] && j == 1
+                                Bz_t[ind] =
+                                    -sum(semi.D[k, r] * Ey[offset_local+r] for r = 1:(N+1))
+                                Bz_t[ind] -= Ey[offset_local+1] / w_0
+                            else
+                                s = Ey[offset_neighbor_local+(N+1)]
+                                s -= Ey[offset_local+1]
+                                s -=
+                                    w_N * sum(
+                                        semi.D[N+1, r] * Ey[offset_neighbor_local+r] for
+                                        r = 1:(N+1)
+                                    )
+                                s -=
+                                    w_0 * sum(semi.D[1, r] * Ey[offset_local+r] for r = 1:(N+1))
+                                Bz_t[ind] = w_inv * s
+                            end
+                        elseif k == N + 1
+                            Bz_t[ind] = -sum(semi.D[k, r] * Ey[offset_local+r] for r = 1:(N+1))
+                            Bz_t[ind] += Ey[offset_local+N+1] / w_N
                         else
-                            s = Ey[offset_neighbor_local+(N+1)]
-                            s -= Ey[offset_local+1]
-                            s -=
-                                w_N * sum(
-                                    semi.D[N+1, r] * Ey[offset_neighbor_local+r] for
+                            Bz_t[ind] = -sum(semi.D[k, r] * Ey[offset_local+r] for r = 1:(N+1))
+                        end
+                        if l == 1
+                            if !semi.periodic[2] && i == 1
+                                Bz_t[ind] += sum(
+                                    semi.D[l, r] * Ex[offset_Ex+(r-1)*(N+inc_x)+k] for
                                     r = 1:(N+1)
                                 )
-                            s -=
-                                w_0 * sum(semi.D[1, r] * Ey[offset_local+r] for r = 1:(N+1))
-                            Bz_t[ind] = w_inv * s
-                        end
-                    elseif k == N + 1
-                        Bz_t[ind] = -sum(semi.D[k, r] * Ey[offset_local+r] for r = 1:(N+1))
-                        Bz_t[ind] += Ey[offset_local+N+1] / w_N
-                    else
-                        Bz_t[ind] = -sum(semi.D[k, r] * Ey[offset_local+r] for r = 1:(N+1))
-                    end
-                    if l == 1
-                        if !semi.periodic[2] && i == 1
+                                Bz_t[ind] += Ex[offset_Ex+k] / w_0
+                            else
+                                s = -Ex[offset_neighbor_y+N*(N+inc_x)+k]
+                                s += Ex[offset_Ex+k]
+                                s +=
+                                    w_N * sum(
+                                        semi.D[N+1, r] *
+                                        Ex[offset_neighbor_y+(r-1)*(N+inc_x)+k] for r = 1:(N+1)
+                                    )
+                                s +=
+                                    w_0 * sum(
+                                        semi.D[1, r] * Ex[offset_Ex+(r-1)*(N+inc_x)+k] for
+                                        r = 1:(N+1)
+                                    )
+                                Bz_t[ind] += w_inv * s
+                            end
+                        elseif l == N + 1
                             Bz_t[ind] += sum(
-                                semi.D[l, r] * Ex[offset_Ex+(r-1)*(N+inc_x)+k] for
-                                r = 1:(N+1)
+                                semi.D[l, r] * Ex[offset_Ex+(r-1)*(N+inc_x)+k] for r = 1:(N+1)
                             )
-                            Bz_t[ind] += Ex[offset_Ex+k] / w_0
+                            Bz_t[ind] -= Ex[offset_Ex+N*(N+inc_x)+k] / w_N
                         else
-                            s = -Ex[offset_neighbor_y+N*(N+inc_x)+k]
-                            s += Ex[offset_Ex+k]
-                            s +=
-                                w_N * sum(
-                                    semi.D[N+1, r] *
-                                    Ex[offset_neighbor_y+(r-1)*(N+inc_x)+k] for r = 1:(N+1)
-                                )
-                            s +=
-                                w_0 * sum(
-                                    semi.D[1, r] * Ex[offset_Ex+(r-1)*(N+inc_x)+k] for
-                                    r = 1:(N+1)
-                                )
-                            Bz_t[ind] += w_inv * s
+                            Bz_t[ind] += sum(
+                                semi.D[l, r] * Ex[offset_Ex+(r-1)*(N+inc_x)+k] for r = 1:(N+1)
+                            )
                         end
-                    elseif l == N + 1
-                        Bz_t[ind] += sum(
-                            semi.D[l, r] * Ex[offset_Ex+(r-1)*(N+inc_x)+k] for r = 1:(N+1)
-                        )
-                        Bz_t[ind] -= Ex[offset_Ex+N*(N+inc_x)+k] / w_N
-                    else
-                        Bz_t[ind] += sum(
-                            semi.D[l, r] * Ex[offset_Ex+(r-1)*(N+inc_x)+k] for r = 1:(N+1)
-                        )
                     end
                     ind += 1
                 end
