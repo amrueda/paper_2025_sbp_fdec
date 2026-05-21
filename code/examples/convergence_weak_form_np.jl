@@ -22,9 +22,6 @@ error_Ex_L2 = zeros(Float64, n_iterations, length(degrees))
 error_Ey_L2 = zeros(Float64, n_iterations, length(degrees))
 error_Bz_L2 = zeros(Float64, n_iterations, length(degrees))
 
-q = plot()
-
-
 println(" ")
 println("p = ", p)
 println(" ")

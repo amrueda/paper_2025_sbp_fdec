@@ -45,7 +45,7 @@ for strong in [false, true]
         )
 
         u_nodal = convert2nodal(semi, u)
-        u_exact = initial_condition_nodal(semi, tspan[2])
+        u_exact = initial_condition_nodal(initial_condition_periodic, semi, tspan[2])
 
         error_Ex_L2[i, it] = l2_norm(semi, u_exact[1] .- u_nodal[1], true, false)
         error_Ey_L2[i, it] = l2_norm(semi, u_exact[2] .- u_nodal[2], false, true)

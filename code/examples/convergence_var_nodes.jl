@@ -58,7 +58,7 @@ for p in degrees
                 constant = true,
             )
             u_nodal = convert2nodal(semi, u)
-            u_exact = initial_condition_nodal(semi, tspan[2])
+            u_exact = initial_condition_nodal(initial_condition_periodic, semi, tspan[2])
 
             error_Ex_L2[i, N-4*p+1, it] =
                 l2_norm(semi, u_exact[1] .- u_nodal[1], true, false)

@@ -21,8 +21,6 @@ error_Ex_L2 = zeros(Float64, n_iterations, length(degrees))
 error_Ey_L2 = zeros(Float64, n_iterations, length(degrees))
 error_Bz_L2 = zeros(Float64, n_iterations, length(degrees))
 
-q = plot()
-
 for p in degrees
     println(" ")
     println("p = ", p)
@@ -49,10 +47,8 @@ for p in degrees
             strong = false,
             constant = true,
         )
-        global q = plot_variables(semi, u .- initial_condition_projected(semi, tspan[2]))
-        plot(q)
         u_nodal = convert2nodal(semi, u)
-        u_exact = initial_condition_nodal(semi, tspan[2])
+        u_exact = initial_condition_nodal(initial_condition_periodic, semi, tspan[2])
 
         error_Ex_L2[i, p-1] = l2_norm(semi, u_exact[1] .- u_nodal[1], true, false)
         error_Ey_L2[i, p-1] = l2_norm(semi, u_exact[2] .- u_nodal[2], false, true)

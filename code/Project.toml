@@ -4,7 +4,6 @@ authors = ["Andrés Rueda-Ramírez", "David del Rey Fernández", "Gregor Gassner
 version = "0.0.0"
 
 [deps]
-BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
 DataInterpolations = "82cc6244-b520-54b8-b5a6-8a565e85f1d0"
 DelimitedFiles = "8bb1440f-4735-579b-a4ab-409b98df4dab"
 JuliaFormatter = "98e50ef6-434e-11e9-1051-2b60c6c9e899"
@@ -18,7 +17,6 @@ SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
 
 [compat]
-BenchmarkTools = "1.6.1"
 DataInterpolations = "8.10.0"
 DelimitedFiles = "1.9.1"
 JuliaFormatter = "1.0.60"

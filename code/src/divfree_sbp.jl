@@ -1587,26 +1587,26 @@ end
 
 
 @inline function initial_condition_periodic(x, t)
-    Ex =
-        -0.5 *
+    Ex = (-0.5 *
         sqrt(2) *
         cos(pi * x[1] + pi) *
         sin(pi * x[2] + pi) *
         sin((pi * 2 / sqrt(2)) * t)
-    Ey =
-        0.5 *
+    )
+    Ey = (0.5 *
         sqrt(2) *
         sin(pi * x[1] + pi) *
         cos(pi * x[2] + pi) *
         sin((pi * 2 / sqrt(2)) * t)
+    )
     Bz = cos(pi * x[1] + pi) * cos(pi * x[2] + pi) * cos((pi * 2 / sqrt(2)) * t)
     return (Ex, Ey, Bz)
 end
 
 @inline function initial_condition_non_periodic(x, t)
-    Ex = cos(5 * pi * x[1]) * cos(5 * pi * x[2]) * sin(5 * pi * sqrt(2) * t)
-    Ey = sin(5 * pi * x[1]) * sin(5 * pi * x[2]) * sin(5 * pi * sqrt(2) * t)
-    Bz = sqrt(2) * cos(5 * pi * x[1]) * sin(5 * pi * x[2]) * cos(5 * pi * sqrt(2) * t)
+    Ex = cos(pi * x[1]) * cos(pi * x[2]) * sin(pi * sqrt(2) * t)
+    Ey = sin(pi * x[1]) * sin(pi * x[2]) * sin(pi * sqrt(2) * t)
+    Bz = sqrt(2) * cos(pi * x[1]) * sin(pi * x[2]) * cos(pi * sqrt(2) * t)
     return (Ex, Ey, Bz)
 end
 

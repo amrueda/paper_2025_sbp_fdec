@@ -33,7 +33,6 @@ for p in degrees
         periodic = (false, false),
         essential = (false, true),
     )
-
     u = initial_condition_projected(initial_condition_non_periodic, semi, tspan[1])
     div_rk[:, i], energy_rk[:, i] = timedisc!(
         u,
@@ -44,7 +43,6 @@ for p in degrees
         save_visu = false,
         implicit = false,
     )
-
     u = initial_condition_projected(initial_condition_non_periodic, semi, tspan[1])
     div_implicit[:, i], energy_implicit[:, i] = timedisc!(
         u,

@@ -32,7 +32,7 @@ for p in degrees
 
         semi = SemiDiscretizationFEECSparse(N - 1, Diagonal(W), sparse(D), nodes, md, -1, 1)
 
-        u = initial_condition_projected(semi, tspan[1])
+        u = initial_condition_projected(initial_condition_periodic, semi, tspan[1])
 
         ener0 = compute_energy(semi, u)
         timedisc!(
@@ -48,7 +48,7 @@ for p in degrees
         )
 
         u_nodal = convert2nodal(semi, u)
-        u_exact = initial_condition_nodal(semi, tspan[2])
+        u_exact = initial_condition_nodal(initial_condition_periodic, semi, tspan[2])
 
         error_Ex_L2[i, p-1] = l2_norm(semi, u_exact[1] .- u_nodal[1], true, false)
         error_Ey_L2[i, p-1] = l2_norm(semi, u_exact[2] .- u_nodal[2], false, true)

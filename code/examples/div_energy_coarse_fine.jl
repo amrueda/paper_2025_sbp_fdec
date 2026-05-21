@@ -23,7 +23,7 @@ for p in degrees
     nodes = vec(nodes)
 
     semi = SemiDiscretizationFEECSparse(N - 1, W, D, nodes, md, -1, 1)
-    u = initial_condition_projected(semi, tspan[1])
+    u = initial_condition_projected(initial_condition_periodic, semi, tspan[1])
     div_rk[:, i], energy_rk[:, i] = timedisc!(
         u,
         semi,
@@ -34,7 +34,7 @@ for p in degrees
         implicit = false,
     )
 
-    u = initial_condition_projected(semi, tspan[1])
+    u = initial_condition_projected(initial_condition_periodic, semi, tspan[1])
     div_implicit[:, i], energy_implicit[:, i] = timedisc!(
         u,
         semi,
@@ -57,7 +57,7 @@ for p in degrees
 
     semi = SemiDiscretizationFEECSparse(N - 1, W, D, nodes, md, -1, 1)
 
-    u = initial_condition_projected(semi, tspan[1])
+    u = initial_condition_projected(initial_condition_periodic, semi, tspan[1])
     div_rk[:, i], energy_rk[:, i] = timedisc!(
         u,
         semi,
@@ -68,7 +68,7 @@ for p in degrees
         implicit = false,
     )
 
-    u = initial_condition_projected(semi, tspan[1])
+    u = initial_condition_projected(initial_condition_periodic, semi, tspan[1])
     div_implicit[:, i], energy_implicit[:, i] = timedisc!(
         u,
         semi,
