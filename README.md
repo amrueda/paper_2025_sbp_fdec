@@ -31,7 +31,7 @@ julia --project=./code -e 'include(joinpath("code", "examples", "convergence_wea
 julia --project=./code -e 'include(joinpath("code", "examples", "convergence_strong_form.jl"))'
 ```
 
-* Run the convergence tests for the periodic case for the non-SBP operator with SSPRK time integration for one element for both the strong and the weak variant: 
+* Run the convergence tests for the periodic case for the non-SBP operator with SSPRK time integration for one element for both the strong and the weak variant (output format is: first column Ex error/EOC weak form, second column Ex error/EOC strong form, third column Ey error/EOC weak form, etc.): 
 ```bash
 julia --project=./code -e 'include(joinpath("code", "examples", "convergence_non_sbp.jl"))'
 ```
