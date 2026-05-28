@@ -18,9 +18,8 @@ error_Ex_L2 = zeros(Float64, n_iterations, 2)
 error_Ey_L2 = zeros(Float64, n_iterations, 2)
 error_Bz_L2 = zeros(Float64, n_iterations, 2)
 
-global it = 1
+it = 1
 for strong in [false, true]
-    it = 1
     N = 12
     for i = 1:n_iterations
         println("1D dof = ", md * (N))
@@ -54,7 +53,6 @@ for strong in [false, true]
         N *= 2
     end
     global it += 1
-    break
 end
 
 eoc_Ex = zeros(Float64, n_iterations - 1, 2)

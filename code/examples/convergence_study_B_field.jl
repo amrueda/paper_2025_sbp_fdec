@@ -68,8 +68,6 @@ for p in degrees
                 save_visu = false,
                 constant = true,
             )
-            #global q = plot_variables(semi, u .- initial_condition_projected(initial_condition_non_periodic, semi, tspan[2]))
-            #global q = plot_variables(semi, u)
             u_nodal = convert2nodal(semi, u)
             u_exact = initial_condition_nodal(initial_condition_non_periodic, semi, tspan[2])
 
@@ -107,6 +105,6 @@ error_plot = plot(
     xlabel = "h",
     ylabel = "Magnetic field error",
 )
-plot!(error_plot, x_plot, 1.5 * x_plot .^ 4, label = "p = 4 reference", linestyle = :dash)
+plot!(error_plot, x_plot, 3 * 10^(-3) * x_plot .^ 4, label = "p = 4 reference", linestyle = :dash)
 
 savefig(error_plot, joinpath("out", "B_field_convergence.pdf"))
